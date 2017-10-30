@@ -5,6 +5,7 @@
 import argparse
 import random
 import sys
+import time
 
 random.seed(0)
 
@@ -29,8 +30,10 @@ class HumanPlayer(Player):
 class ComputerPlayer(Player):
 
     def decide(self, round_score):
-        if round_score < 25:
+        if round_score == 0:
             self.answer = 'r'
+        elif (100-self.score > 25 and round_score < 25):
+                self.answer = 'r'
         else:
             self.answer = 'h'
 
@@ -54,9 +57,12 @@ class Die(object):
 class Game(object):
 
     def __init__(self, player1type, player2type):
+        self.die = Die()
         self.current_player = 0
         self.round_score = 0
         self.total_score = 0
+        self.winner = None
+        self.start = time.time()
         self.playerlist = []
         factory = PlayerFactory()
         self.playerlist.append(factory.getPlayer('1', player1type))
@@ -71,6 +77,100 @@ class Game(object):
     def clear_round_score(self):
         self.round_score = 0
 
+    def get_winner(self):
+
+        if self.playerlist[0].score > self.playerlist[1].score:
+            self.winner = 'Player 1'
+        elif self.playerlist[1].score > self.playerlist[0].score:
+            self.winner = 'Player 2'
+        else:
+            self.winner = 'TIED GAME'
+        return self.winner
+
+    def game_logic(self):
+        # announce which player is playing
+        self.announce_turn(self.playerlist[self.current_player])
+        # ask player to decide whether to roll or hold
+        self.playerlist[self.current_player].decide(self.round_score)
+
+        if self.playerlist[self.current_player].answer == 'r':
+            value = self.die.roll()
+            print '-' * 40
+            print 'Player {} rolled a {}'.format((self.current_player) + 1,
+                                                 value)
+
+            if value == 1:
+                # subtracts the round score from the player score, to forfeit points
+                self.playerlist[self.current_player].score -= self.round_score
+                print 'Player {} forfeits points earned this round.'.format(
+                    (self.current_player) + 1
+                )
+                print 'Player {} score reverts to {}.'.format(
+                    (self.current_player) + 1,
+                    self.playerlist[self.current_player].score)
+                print 'Player {} turn is over.\n'.format(
+                    (self.current_player) + 1)
+                print '-' * 40
+                # ends turn and sets other player as active
+                self.current_player = 1 if self.current_player == 0 else 0
+                # resets round score to 0
+                self.clear_round_score()
+
+            if 2 <= value <= 6:
+                # updates round score based on dice roll
+                self.update_round_score(value)
+                # updates player score based on dice roll
+                self.playerlist[self.current_player].update_score(value)
+                print 'Score for this round is {}'.format(self.round_score)
+                print 'New score is {}'.format(
+                    self.playerlist[self.current_player].score)
+                print '-' * 40
+                # updates total game score if player score reaches new high
+                if self.playerlist[
+                    self.current_player].score > self.total_score:
+                    self.total_score = self.playerlist[
+                        self.current_player].score
+
+        elif self.playerlist[self.current_player].answer == 'h':
+            print '-' * 40, '\nPlayer {} chose to hold'.format(
+                (self.current_player) + 1)
+            print 'Score remains at {}'.format(
+                self.playerlist[self.current_player].score)
+            print 'Turn is now over.\n', '-' * 40
+            # updates overall game score if player score reaches new high
+            if self.playerlist[self.current_player].score > self.total_score:
+                self.total_score = self.playerlist[self.current_player].score
+            # ends turn and sets other player as active
+            self.current_player = 1 if self.current_player == 0 else 0
+            # resets round score to 0
+            self.clear_round_score()
+
+        else:
+            # intercepts invalid input and provides direction
+            print '-' * 40, '\n Invalid choice, type \'r\' or \'h\'.\n', '-' * 40
+
+    def end_game(self):
+
+        self.get_winner()
+        print 'The winner is {}!'.format(self.winner)
+        print 'Game over.'
+        sys.exit()
+
+    def play_game(self):
+
+        while self.total_score < 100:
+            self.game_logic()
+        self.end_game()
+
+class TimedGameProxy(Game):
+
+    def play_game(self):
+
+        while self.total_score < 100 and ((time.time() - self.start) < 60):
+            print 'Time remaining: {} seconds'.format(60-(time.time() - self.start))
+            self.game_logic()
+        print 'Time is up!'
+        self.end_game()
 
 def main():
 
@@ -78,71 +178,18 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--player1", type=str, required=True, help='Specify human or computer')
     parser.add_argument("--player2", type=str, required=True, help='Specify human or computer')
+    parser.add_argument("--timed", action="store_true", help='Runs a 60 second timed game')
     args = parser.parse_args()
     player1type = args.player1
     player2type = args.player2
+    timed = args.timed
 
-    Pig = Game(player1type, player2type)
-    Die1 = Die()
+    if timed:
+        Pig = TimedGameProxy(player1type, player2type)
+    else:
+        Pig = Game(player1type, player2type)
 
-    while Pig.total_score < 100:
-        # announce which player is playing
-        Pig.announce_turn(Pig.playerlist[Pig.current_player])
-        # ask player to decide whether to roll or hold
-        Pig.playerlist[Pig.current_player].decide(Pig.round_score)
-
-        if Pig.playerlist[Pig.current_player].answer == 'r':
-            value = Die1.roll()
-            print '-' * 40
-            print 'Player {} rolled a {}'.format((Pig.current_player)+1, value)
-
-            if value == 1:
-                # subtracts the round score from the player score, to forfeit points
-                Pig.playerlist[Pig.current_player].score -= Pig.round_score
-                print 'Player {} forfeits points earned this round.'.format(
-                    (Pig.current_player)+1
-                )
-                print 'Player {} score reverts to {}.'.format(
-                    (Pig.current_player)+1,
-                    Pig.playerlist[Pig.current_player].score)
-                print 'Player {} turn is over.\n'.format((Pig.current_player)+1)
-                print '-' * 40
-                # ends turn and sets other player as active
-                Pig.current_player = 1 if Pig.current_player == 0 else 0
-                # resets round score to 0
-                Pig.clear_round_score()
-
-            if 2 <= value <= 6:
-                # updates round score based on dice roll
-                Pig.update_round_score(value)
-                # updates player score based on dice roll
-                Pig.playerlist[Pig.current_player].update_score(value)
-                print 'Score for this round is {}'.format(Pig.round_score)
-                print 'New score is {}'.format(Pig.playerlist[Pig.current_player].score)
-                print '-' * 40
-                # updates total game score if player score reaches new high
-                if Pig.playerlist[Pig.current_player].score > Pig.total_score:
-                    Pig.total_score = Pig.playerlist[Pig.current_player].score
-
-        elif Pig.playerlist[Pig.current_player].answer == 'h':
-            print '-' * 40, '\nPlayer {} chose to hold'.format((Pig.current_player)+1)
-            print 'Score remains at {}'.format(Pig.playerlist[Pig.current_player].score)
-            print 'Turn is now over.\n', '-' * 40
-            # updates overall game score if player score reaches new high
-            if Pig.playerlist[Pig.current_player].score > Pig.total_score:
-                Pig.total_score = Pig.playerlist[Pig.current_player].score
-            #  ends turn and sets other player as active
-            Pig.current_player = 1 if Pig.current_player == 0 else 0
-            # resets round score to 0
-            Pig.clear_round_score()
-
-        else:
-            # intercepts invalid input and provides direction
-            print '-' * 40, '\n Invalid choice, type \'r\' or \'h\'.\n', '-' * 40
-
-    print 'Player {} is the winner!'.format((Pig.current_player)+1)
-    print 'Game over.'
-    sys.exit()
+    Pig.play_game()
 
 if __name__ == '__main__':
     main()
